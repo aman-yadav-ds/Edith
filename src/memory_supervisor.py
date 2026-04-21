@@ -19,16 +19,17 @@ class MemorySupervisor:
 
         self.prompt = ChatPromptTemplate.from_messages([
             ("system",
-             "You are a Memory Extraction Assistant.\n\n"
-             "Your job is to distill the interaction into a single, factual memory string to be saved in a database.\n"
+             "You are a strict Memory Extraction Assistant.\n\n"
+             "Your job is to distill the interaction into a single, factual memory string to be saved in a database.\n\n"
              "WHAT TO EXTRACT:\n"
-             "1. Permanent user facts or preferences (e.g., 'User prefers Python', 'User lives in New York').\n"
-             "2. Actions the assistant just successfully completed on the user's system (e.g., 'Assistant created a file named secret.txt on the Desktop').\n\n"
+             "1. System actions: Actions the assistant just successfully completed on the user's local machine (e.g., 'The assistant created a file named notes.txt on the Desktop').\n"
+             "2. Project milestones: The specific technical step or context the user just established for the current session (e.g., 'The user is currently debugging the router node in LangGraph').\n\n"
              "RULES:\n"
-             "- Write the memory in the third person (e.g., 'The user...', 'The assistant...').\n"
-             "- Be concise. Keep it to one factual sentence.\n"
-             "- If the interaction was just casual chat or a failed action, output the exact word: NONE\n"
-             "- DO NOT output anything other than the memory or the word NONE."
+             "- Write the memory strictly in the third person (e.g., 'The user...', 'The assistant...').\n"
+             "- Be concise. Keep it to one single factual sentence.\n"
+             "- CRITICAL EXCLUSION 1: DO NOT extract permanent user identity facts, names, aliases, or broad preferences. These are managed in a separate config file.\n"
+             "- CRITICAL EXCLUSION 2: If the interaction was casual chat, a greeting, a clarifying question, an identity declaration (e.g., 'call me boss'), or a failed action, you MUST output the exact word: NONE\n"
+             "- DO NOT output anything other than the memory sentence or the word NONE."
             ),
             ("human",
              "User said: {user_text}\n"

@@ -44,9 +44,9 @@ def router(state: AgentState):
 class Brain:
     def __init__(self, config_path="config/brain_config.yaml"):
         # --- Reading Config ---
-        self.config = read_yaml_config(config_path)
-        print(self.config)
-        if not self.config:
+        self._config = read_yaml_config(config_path)
+        print(self._config)
+        if not self._config:
             raise ValueError(f"Failed to load brain config from '{config_path}'")
 
 
@@ -57,8 +57,8 @@ class Brain:
         # )
 
         self.llm = ChatGroq(
-            model=self.config["model"]["name"],
-            temperature=self.config["model"]["temperature"]
+            model=self._config["model"].get("name", "llama-3.3-70b-versatile"),
+            temperature=self._config["model"].get("temperature", 0.7)
         )
 
         # --- Memory ---
@@ -121,13 +121,16 @@ class Brain:
 
         # 4. Build the System Prompt with the injected memories
         system_prompt = SystemMessage(content=(
-            f"You are {self.config['name']}, a helpful and precise AI assistant.\n"
+            f"You are {self._config.get('name', 'Edith')}, a helpful and precise AI assistant.\n"
             f"You are running on a {current_os} operating system.\n"
             f"The user's true home directory is: {home_directory}\n"
-            f"{memory_context}\n"
+            f"Recent memories that might be relevant to this conversation: {memory_context}\n"
+            f"User Preferences: {self._config.get('user_preferences', {})}\n"
             f"CRITICAL RULES:\n"
             f"1. When using tools to access the file system, ALWAYS use absolute paths based on the home directory.\n"
-            f"2. Never guess usernames like 'username' or 'user'."
+            f"2. Never guess usernames like 'username' or 'user'.\n"
+            f"3. DO NOT use the `create_file` tool to save user preferences, names, rules, or conversational memories. "
+            f"Your memory is managed automatically by the system. Just acknowledge the user's request naturally in text."
         ))
 
         history = state["messages"]
@@ -199,7 +202,7 @@ class Brain:
 
 if __name__ == "__main__":
     brain = Brain()
-    user_request = "What is your name?"
+    user_request = "Edith, Now who am I?"
     brain.brain_is_braining(user_request)
 
     

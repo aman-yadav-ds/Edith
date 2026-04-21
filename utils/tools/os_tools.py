@@ -30,8 +30,9 @@ def check_folder(folder_path: str) -> bool:
 
 @tool
 def create_file(file_path: str, content: str) -> bool:
-    """
-    Creates a new file with the given content at the specified path.
+    """Only use this tool when the user explicitly commands you to generate a new local file on their machine 
+    (e.g., 'Write this code to a python file' or 'Create a text document'). Do not use this tool to save internal notes 
+    or conversational context.
     """
     file_path = os.path.expanduser(file_path)  # Expand ~ to the user home directory
 

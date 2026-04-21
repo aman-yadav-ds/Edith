@@ -6,7 +6,7 @@ import uuid
 from utils.helpers import read_yaml_config
 
 class MemoryStore:
-    def __init__(self, config_path="config/config.yaml"):
+    def __init__(self, config_path="config/memory_config.yaml"):
         self._config = read_yaml_config(config_path)
         self._memory_settings = self._config.get("memory_settings", {})
         self._path = self._memory_settings.get("path", "memory_db")

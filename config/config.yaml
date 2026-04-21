@@ -27,8 +27,4 @@ brain_settings:
 
 voice_settings:
   model: "./piper_voices/en_GB-cori-high.onnx"
-
-memory_settings:
-  path: "memory_db"
-  embedding_model: "all-MiniLM-L6-v2"
   
