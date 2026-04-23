@@ -19,7 +19,7 @@ class MemoryStore:
         
         # Get or Create Collection
         self.collection = self.client.get_or_create_collection(
-            name="emma_memory",
+            name="edith_memory",
             embedding_function=self.ef
         )
 

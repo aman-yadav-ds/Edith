@@ -15,6 +15,7 @@ from langgraph.checkpoint.memory import MemorySaver
 from src.memory_manager import MemoryManager
 from utils.helpers import read_yaml_config
 from utils.tools.os_tools import check_folder, create_file, execute_terminal
+from utils.tools.tools import open_website, check_vital_signs
 from utils.logger import edith_logger
 
 
@@ -69,7 +70,7 @@ class Brain:
 
         self.checkpointer = MemorySaver()
 
-        tools = [check_folder, create_file, execute_terminal]
+        tools = [check_folder, create_file, execute_terminal, open_website, check_vital_signs]
         self.brain_with_tools = self.llm.bind_tools(tools)
 
         self.tools_by_name = {tool.name: tool for tool in tools}
@@ -95,6 +96,7 @@ class Brain:
         workflow.add_edge("worker", "manager")
 
         self.app = workflow.compile(checkpointer=self.checkpointer)
+        self.active_memory_context = "" 
 
         print(f"Brain is ready to go!")
 
@@ -111,47 +113,42 @@ class Brain:
         current_os = platform.system()
         home_directory = os.path.expanduser("~")
 
-        # 2. Extract the user's actual prompt to search memory
-        # We loop backward through the backpack to find the last thing the human said
-        last_user_message = next((m.content for m in reversed(state["messages"]) if isinstance(m, HumanMessage)), "")
-        
-        relevant_memories = ""
+        # 2. Check who spoke last
+        last_message = state["messages"][-1]
+        edith_logger.debug(f"Last message content: '{last_message.content}'")
+        # 3. ONLY query the memory database if the Human just spoke.
+        # If the last message was a ToolMessage, we skip retrieval and use the cached memory.
+        if isinstance(last_message, HumanMessage):
+            edith_logger.debug(f"New human input detected. Retrieving memories for: '{last_message.content}'")
+            retrieved_data = self.memory_manager.retrieve(last_message.content)
+            
+            # Update the cache for this conversation turn
+            if retrieved_data:
+                self.active_memory_context = f"\n\nPast Memories:\n{retrieved_data}\n\n"
+            else:
+                self.active_memory_context = ""
+        else:
+            edith_logger.debug("Looping back from worker. Using cached memory context.")
 
-        # 3. Retrieve relevant memories from Chroma
-        if last_user_message:
-            # You can also use your should_retrieve_memory logic here if you want to save processing time!
-            edith_logger.debug(f"Manager is retrieving relevant memories for the user's last message: '{last_user_message}'")
-            relevant_memories = self.memory_manager.retrieve(last_user_message)
+        user_title = self._config.get('user_preferences', {}).get('name_pref', 'Boss')
 
-        memory_context = f"\n\nPast Memories:\n{relevant_memories}\n\n" if relevant_memories else ""
-
-        # 4. Build the System Prompt with the injected memories
-        # 4. Build the System Prompt with the injected memories
-        # 4. Build the System Prompt with the injected memories
+        # 4. Build the System Prompt using the CACHED memories
         system_prompt = SystemMessage(content=(
-            f"You are {self._config.get('name', 'Edith')}, a helpful and precise AI assistant.\n"
-            f"You are running on a {current_os} operating system.\n"
-            f"The user's true home directory is: {home_directory}\n"
-            f"Recent memories that might be relevant to this conversation: {memory_context}\n"
-            f"User Preferences: {self._config.get('user_preferences', {})}\n"
-            f"CRITICAL RULES:\n"
-            f"1. When using tools to access the file system, ALWAYS use absolute paths based on the home directory.\n"
-            f"2. Never guess usernames like 'username' or 'user'.\n"
-            f"3. DO NOT use the `create_file` tool to save user preferences, names, rules, or conversational memories. "
-            f"Your memory is managed automatically by the system. Just acknowledge the user's request naturally in text.\n"
-            f"4. VOICE OUTPUT MODE (STRICT):\n"
-            f"   - Your text responses are spoken out loud by a TTS engine. NEVER output raw code blocks, markdown syntax (like ```), or long URLs in your conversational text.\n"
-            f"   - If the user asks you to write code, create a script, or save a file, YOU MUST USE THE `create_file` TOOL.\n"
-            f"   - NEVER write Python code that uses `with open(...)` to save files. That is unauthorized. USE THE `create_file` TOOL.\n"
-            f"   - Put the generated code strictly inside the `content` argument of the `create_file` tool.\n"
-            f"   - Keep your spoken text incredibly brief. For example: 'I have drafted the script and saved it to your Desktop, Boss.'"
+            f"Role: {self._config.get('name', 'Edith')}, a voice AI on {current_os}.\n"
+            f"Home: {home_directory}\n"
+            f"Memories: {self.active_memory_context}\n"
+            f"Prefs: {self._config.get('user_preferences', {})}\n\n"
+            f"STRICT DIRECTIVES:\n"
+            f"1. FILES: Use absolute paths. Never guess usernames. Do NOT use `create_file` to save memory/prefs (handled automatically).\n"
+            f"2. VOICE: Text is spoken via TTS. NO markdown, code blocks (```), or URLs. Be incredibly brief (1-2 sentences). ALWAYS address the user as {user_title} (e.g., 'I have opened the website for you, {user_title}.').\n"
+            f"3. TOOLS: Prefer native tools (`open_website`, `check_vital_signs`) over `execute_terminal`. Use standard API JSON tool calls. NEVER write JSON/code in your spoken text. Use `open_website` for ALL web browsing."
         ))
 
         history = state["messages"]
         trimmed_history = history[-10:]  # Keep only the last 10 messages for context to save tokens
         messages_to_send = [system_prompt] + trimmed_history
 
-        response = self.brain_with_tools.invoke(messages_to_send)
+        response = self.brain_with_tools.with_config({"tags": ["main_voice"]}).invoke(messages_to_send)
 
         return {"messages": response}
 
@@ -220,11 +217,10 @@ class Brain:
                 config=config,
                 stream_mode="messages"
             ):
-                # We only care about messages coming from the 'manager' node
-                if metadata["langgraph_node"] == "manager" and not isinstance(msg, ToolMessage):
+                # We strictly only listen to the LLM tagged as the main voice
+                if "main_voice" in metadata.get("tags", []) and not isinstance(msg, ToolMessage):
                     content = msg.content
                     if content:
-                        # 1. Always save the raw content so memory gets the actual code
                         full_response_content += content
                         speech_buffer += content
 
@@ -257,7 +253,7 @@ class Brain:
             
         # After the stream is done, store the full response.
         if full_response_content.strip():
-            edith_logger.info(f"Full response from Manager: {full_response_content}")
+            print(f"Full response from Manager: {full_response_content}")
             edith_logger.info(f"Storing the user's request and the final answer in memory...")
             self.memory_manager.store(user_input, full_response_content)
 if __name__ == "__main__":

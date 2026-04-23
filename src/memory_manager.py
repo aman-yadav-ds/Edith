@@ -36,7 +36,7 @@ class MemoryManager:
         """
         try:
             should_retrieve = self.supervisor.should_retrieve(query)
-            if not should_retrieve:
+            if should_retrieve.lower() == "no":
                 edith_logger.info(f"🚫 Memory retrieval deemed unnecessary by supervisor: {should_retrieve}")
                 return ""
             else:

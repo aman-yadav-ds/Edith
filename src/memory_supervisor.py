@@ -70,7 +70,7 @@ class MemorySupervisor:
 
         return memory
     
-    def should_retrieve(self, query: str) -> bool:
+    def should_retrieve(self, query: str) -> str:
         """
         Returns whether it should retrieve relevant memories based on the query.
         """
@@ -80,4 +80,4 @@ class MemorySupervisor:
 
         decision = result.content.strip().lower()
 
-        return decision in ["yes", "no"]
+        return decision

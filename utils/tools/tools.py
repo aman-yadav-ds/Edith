@@ -1,73 +1,66 @@
 from langchain.tools import tool
-from utils.tools.music_tool import SpotifyTool
-from utils.tools.email_tool import (EmailTool, EmailSessionManager, GmailSender, 
-                                    read_email_for_confirmation, confirm_email, send_confirmed_email)
-from enum import Enum
 
-class EmailState(Enum):
-    DRAFTED = "drafted"
-    CONFIRMED = "confirmed"
-    SENT = "sent"
+import webbrowser
+import subprocess
+import psutil, GPUtil
 
-@tool
-def play_music(query: str) -> str:
-    """This tools takes query as the song name by author and plays it on spotify"""
-    return SpotifyTool().play_song(query)
+SAFE_APPS = {
+    "apex": r"C:\\Program Files\\EA Games\\Apex\\r5apex.exe",
+    "wuthering waves": r"C:\\Program Files\\Wuthering Waves\\launcher.exe",
+    "arknights": r"C:\\Program Files\\Arknights Endfield\\launcher.exe",
+    "obs": r"C:\\Program Files\\obs-studio\\bin\\64bit\\obs64.exe"
+}
 
 @tool
-def stop_music() -> str:
-    """This tool stops the music playing on spotify"""
-    return SpotifyTool().stop_playback()
+def open_website(url: str) -> str:
+    """
+    Opens a provided URL in the user's default web browser.
+    
+    WHEN TO USE:
+    - ALWAYS use this tool when the user asks to "open", "go to", "search for", or "watch" something on the internet (e.g., YouTube, reading manhwa, checking email).
+    - DO NOT use the `execute_terminal` tool to open web pages.
+    - DO NOT write Selenium or Python scripts to open browsers unless explicitly asked to write an automation script.
+    
+    INPUT: A valid, complete URL string (e.g., "https://www.youtube.com/results?search_query=phonk+songs").
+    """
+    try:
+        success = webbrowser.open(url)
+        if success:
+            return f"Successfully opened website: {url} in the browser."
+        else:
+            return f"Failed to open website."
+    except Exception as e:
+        return f"Error opening website: {str(e)}"
+    
 
 @tool
-def set_volume(level: int) -> str:
-    """This tool sets the volume on spotify to the specified level (0-100)"""
-    return SpotifyTool().set_volume(level)
+def check_vital_signs(action: str) -> str:
+    """
+    Retrieves real-time hardware diagnostics for the user's system, including CPU, RAM, and GPU usage.
+    
+    WHEN TO USE:
+    - ALWAYS use this tool when the user asks about system health, memory usage, CPU load, overheating, or if the computer is lagging.
+    - DO NOT use the `execute_terminal` tool to run task manager or system stat commands.
+    
+    INPUT: A simple string like 'all', 'cpu', 'ram', or 'gpu'.
+    """
+    try:
+        vitals = []
 
-@tool
-def read_emails(count: int) -> str:
-    """This tool reads the latest 'count' emails from the user's inbox"""
-    return EmailTool().read_emails(count)
+        cpu_usage = psutil.cpu_percent(interval=1)
+        vitals.append(f"CPU Usage: {cpu_usage}%")
 
-@tool
-def reply_email(recipient: str, subject: str, body: str) -> str:
-    """This tool sends an email to the specified recipient with the given subject and body"""
-    return EmailTool().reply_email(recipient, subject, body)
+        ram = psutil.virtual_memory()
+        vitals.append(f"RAM Usage: {ram.percent}% ({ram.used / (1024**3):.2f} GB used of {ram.total / (1024**3):.2f} GB)")
 
+        gpus = GPUtil.getGPUs()
+        if gpus:
+            for gpu in gpus:
+                vitals.append(f"RTX GPU Load: {gpu.load * 100:.1f}%, VRAM: {gpu.memoryUtil * 100:.1f}%, Temp: {gpu.temperature}°C")
+        else:
+            vitals.append("Dedicated GPU metrics not currently accessible.")
 
-email_session = EmailSessionManager()
-@tool
-def generate_email_draft(recipient: str, topic: str) -> str:
-    """Generate an email draft and store it for confirmation"""
-    draft = EmailTool().generate_email_draft(recipient, topic)
-    email_session.set_draft(draft)
-
-    return (
-        "I have drafted the email.\n"
-        "Say 'read the email' to hear it, "
-        "or 'send the email' to confirm."
-    )
-
-@tool
-def read_draft_email() -> str:
-    """Read the drafted email for confirmation"""
-    if not email_session.has_draft():
-        return "There is no email draft to read."
-
-    return read_email_for_confirmation(email_session.pending_email)
-
-@tool
-def confirm_email_send() -> str:
-    """Confirm and send the drafted email"""
-    if not email_session.has_draft():
-        return "There is no email draft to confirm."
-
-    pending = email_session.pending_email
-    confirm_email(pending)
-
-    sender = GmailSender()
-    send_confirmed_email(pending, sender)
-
-    email_session.clear()
-
-    return "The email has been sent successfully."
+        return " | ".join(vitals)
+    except Exception as e:
+        return f"Error checking vital signs: {str(e)}"
+    
