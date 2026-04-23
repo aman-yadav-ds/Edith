@@ -72,7 +72,7 @@ class MemorySupervisor:
     
     def should_retrieve(self, query: str) -> bool:
         """
-        Returns whether it should retrieve relevant memories based on the query and available memories.
+        Returns whether it should retrieve relevant memories based on the query.
         """
         result = (self.retrieve_prompt | self.llm).invoke({
             "query": query

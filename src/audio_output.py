@@ -4,7 +4,9 @@ import pygame
 import io
 import wave
 import re
+
 from utils.helpers import read_yaml_config
+from utils.logger import edith_logger
 
 class AudioOutput:
     """
@@ -64,7 +66,7 @@ class AudioOutput:
             return wav_buffer
 
         except Exception as e:
-            print(f"⚠️ TTS Generation Error: {e}")
+            edith_logger.warning(f"⚠️ TTS Generation Error: {e}")
             return None
 
     async def play_audio_stream(self, audio_stream):
@@ -94,7 +96,7 @@ class AudioOutput:
             pygame.mixer.music.unload()
             return True
         except Exception as e:
-            print(f"⚠️ Audio playback error: {e}")
+            edith_logger.error(f"⚠️ Audio playback error: {e}")
             return True
 
     async def playback_loop(self):
@@ -156,7 +158,7 @@ class AudioOutput:
                         if on_start_speaking:
                             on_start_speaking()
                             
-                        print(f"🗣️ AI Speaking: {sentence}")
+                        edith_logger.info(f"🗣️ AI Speaking: {sentence}")
                         
                         # Generate and queue audio
                         # Note: This is now a blocking call (Piper is fast but blocking)
@@ -171,7 +173,7 @@ class AudioOutput:
         if text_buffer and text_buffer.strip() and not self.stop_event.is_set():
             if on_start_speaking:
                 on_start_speaking()
-            print(f"🗣️ AI Speaking: {text_buffer}")
+            edith_logger.info(f"🗣️ AI Speaking: {text_buffer}")
             audio_stream = await self.generate_audio_stream(text_buffer)
             if audio_stream:
                 await self.audio_queue.put(audio_stream)

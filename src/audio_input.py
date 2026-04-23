@@ -1,15 +1,18 @@
 import asyncio
-import queue
-import numpy as np
 import pyaudio
-import torch
+import queue
 import sys
 import time
 import io
+
+import numpy as np
+import torch
 import scipy.io.wavfile as wavfile
 from faster_whisper import WhisperModel
 from dotenv import load_dotenv
+
 from utils.helpers import read_yaml_config
+from utils.logger import edith_logger
 
 load_dotenv()
 
@@ -60,11 +63,11 @@ class AudioInput:
         self.is_speaking = False
         
         # --- Model Initialization ---
-        print("🎧 Initializing Audio Subsystems...")
+        edith_logger.info("🎧 Initializing Audio Subsystems...")
         
         # Initialize Faster-Whisper
         
-        print("  - Loading 'small.en' Whisper model...")
+        edith_logger.info("  - Loading 'small.en' Whisper model...")
         self.transcription_model = WhisperModel(
             "small.en",
             device="cuda" if self.cuda_available else "cpu",
@@ -73,7 +76,7 @@ class AudioInput:
             cpu_threads=4
         )
         
-        print("  - Loading Silero VAD for voice detection...")
+        edith_logger.info("  - Loading Silero VAD for voice detection...")
         self.vad_model, _ = torch.hub.load(
             repo_or_dir='snakers4/silero-vad',
             model='silero_vad',
@@ -84,7 +87,7 @@ class AudioInput:
         
         # --- Wake Word Buffer Setup ---
         if self.wake_word_enabled:
-            print(f"✅ Wake word ready! Say '{self.wake_word.capitalize()}' to activate.")
+            edith_logger.info(f"✅ Wake word ready! Say '{self.wake_word.capitalize()}' to activate.")
             self.wake_word_buffer = []
             # Calculate max chunks for the rolling buffer
             self.max_wake_buffer_chunks = int(self.wake_word_buffer_size * (self.RATE / self.CHUNKS))
@@ -152,13 +155,13 @@ class AudioInput:
             text = await asyncio.to_thread(self._transcribe_audio, audio_float32)
             
             if self.wake_word in text.lower():
-                print(f"\n🎯 Wake word '{self.wake_word.capitalize()}' detected!")
+                edith_logger.info(f"\n🎯 Wake word '{self.wake_word.capitalize()}' detected!")
                 return True
             
             return False
             
         except Exception as e:
-            print(f"⚠️ Wake word check failed: {e}")
+            edith_logger.error(f"⚠️ Wake word check failed: {e}")
             return False
 
     async def wake_word_timeout_loop(self):
@@ -173,7 +176,7 @@ class AudioInput:
                 elapsed = time.time() - self.last_wake_time
                 if elapsed > self.wake_word_timeout:
                     self.is_awake = False
-                    print(f"\n😴 Timeout reached. Say '{self.wake_word.capitalize()}' to wake me up.")
+                    edith_logger.info(f"\n😴 Timeout reached. Say '{self.wake_word.capitalize()}' to wake me up.")
 
     # --- SIMPLIFIED HALLUCINATION CHECK ---
     def _is_valid_speech(self, text: str) -> bool:
@@ -198,9 +201,9 @@ class AudioInput:
         stream.start_stream()
         
         if self.wake_word_enabled:
-            print(f"\n🎤 Listening for wake word '{self.wake_word.capitalize()}'...")
+            edith_logger.info(f"\n🎤 Listening for wake word '{self.wake_word.capitalize()}'...")
         else:
-            print("\n🎤 Listening... (Say 'Exit' to stop)")
+            edith_logger.info("\n🎤 Listening... (Say 'Exit' to stop)")
 
         audio_buffer = []
         is_recording = False
@@ -245,7 +248,7 @@ class AudioInput:
                         if await self.check_for_wake_word(self.wake_word_buffer):
                             self.is_awake = True
                             self.last_wake_time = time.time()
-                            print("✅ Awake and listening!")
+                            edith_logger.info("✅ Awake and listening!")
                             
                             # Transition directly to recording state to capture the rest of the sentence
                             # We keep the wake buffer as the start of the recording
@@ -269,12 +272,12 @@ class AudioInput:
             # 1. Interruption Logic (Barge-In)
             if self.is_speaking:
                 if (voice_confidence > self.BARGE_IN_CONFIDENCE) and (rms > self.BARGE_IN_RMS):
-                    print("\n🛑 Interruption detected! Cutting speech.")
+                    edith_logger.info("\n🛑 Interruption detected! Cutting speech.")
                     self.stop_event.set()
                     self.is_speaking = False
                     
                     if not is_recording:
-                        print(f"\n🗣️ User interrupted...")
+                        edith_logger.info(f"\n🗣️ User interrupted...")
                         is_recording = True
                         recording_start_time = time.time()
                         audio_buffer = []
@@ -283,7 +286,7 @@ class AudioInput:
             # 2. Start Recording
             elif not is_recording:
                 if (voice_confidence > 0.65) and (rms > self.RMS_THRESHOLD):
-                    print(f"\n🗣️ Speech detected...")
+                    edith_logger.info(f"\n🗣️ Speech detected...")
                     is_recording = True
                     recording_start_time = time.time()
                     audio_buffer = []
@@ -307,10 +310,10 @@ class AudioInput:
                         is_recording = False
 
                         if self.deserves_transcription(audio_buffer):
-                            print("🔇 End of turn. Valid speech.")
+                            edith_logger.info("🔇 End of turn. Valid speech.")
                             await self.process_audio_input(audio_buffer)
                         else:
-                            print("🗑️ Discarded low-quality turn.")
+                            edith_logger.info("🗑️ Discarded low-quality turn.")
 
                         audio_buffer = []
                         silence_counter = 0
@@ -338,11 +341,11 @@ class AudioInput:
             sys.stdout.flush()
 
             if not self._is_valid_speech(transcribed_text):
-                print("🗑️ Discarded noise/hallucination.")
+                edith_logger.info("🗑️ Discarded noise/hallucination.")
                 self.transcription_queue.task_done()
                 continue
 
-            print(f"📝 Heard: {transcribed_text}")
+            edith_logger.info(f"📝 Heard: {transcribed_text}")
 
             # Push to the Brain queue. 
             # We hardcode confidence to 1.0 since we removed the complex math.

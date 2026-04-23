@@ -15,6 +15,7 @@ from langgraph.checkpoint.memory import MemorySaver
 from src.memory_manager import MemoryManager
 from utils.helpers import read_yaml_config
 from utils.tools.os_tools import check_folder, create_file, execute_terminal
+from utils.logger import edith_logger
 
 
 load_dotenv()  # Load environment variables from .env file
@@ -31,14 +32,14 @@ def router(state: AgentState):
     If it asked for a tool, route to 'worker'.
     If it just talked, route to END.
     """
-    print(f"\nRouter is checking the Manager's last message...")
+    edith_logger.info(f"Router is checking the Manager's last message to decide where to route next...")
     last_message = state["messages"][-1]
 
     if last_message.tool_calls:
-        print(f"Router is routing to WORKER...")
+        edith_logger.debug(f"Router is routing to WORKER...")
         return "worker"
     else:
-        print(f"Router is routing to END...")
+        edith_logger.debug(f"Router is routing to END...")
         return "end"
 
 
@@ -105,7 +106,7 @@ class Brain:
         It looks at the history and decides: "Do I talk, or do I use a tool?"
         """
 
-        print(f"Manager is Thinking...")
+        edith_logger.info(f"Manager is Thinking...")
         # 1. Get the Platform and Home Directory for System Prompt (This is CRITICAL info for the Manager to have when deciding how to use tools safely!)
         current_os = platform.system()
         home_directory = os.path.expanduser("~")
@@ -119,7 +120,7 @@ class Brain:
         # 3. Retrieve relevant memories from Chroma
         if last_user_message:
             # You can also use your should_retrieve_memory logic here if you want to save processing time!
-            print(f"Manager is retrieving relevant memories for the user's last message: '{last_user_message}'")
+            edith_logger.debug(f"Manager is retrieving relevant memories for the user's last message: '{last_user_message}'")
             relevant_memories = self.memory_manager.retrieve(last_user_message)
 
         memory_context = f"\n\nPast Memories:\n{relevant_memories}\n\n" if relevant_memories else ""
@@ -159,7 +160,7 @@ class Brain:
         This box ONLY runs if the Manager asked for a tool.
         It acts as the "Hands" to do the physical work.
         """
-        print(f"Worker is running tools...")
+        edith_logger.info(f"Worker is running tools...")
 
         #1. Get the last message, which should be a ToolMessage
         last_message = state["messages"][-1]
@@ -173,8 +174,8 @@ class Brain:
             tool_args = tool_call["args"]
 
             # --- ADD THIS DEBUG PRINT ---
-            print(f"   [DEBUG] Manager called: {tool_name}")
-            print(f"   [DEBUG] Arguments: {tool_args}")
+            edith_logger.debug(f"Manager called: {tool_name}")
+            edith_logger.debug(f"Arguments: {tool_args}")
 
             selected_tool = self.tools_by_name.get(tool_name)
 
@@ -184,7 +185,7 @@ class Brain:
                 result = f"Error running tool '{tool_name}': {str(e)}"
             
             # --- ADD THIS DEBUG PRINT ---
-            print(f"   [DEBUG] Tool returned: {str(result)[:150]}...") # Only print first 150 chars so it doesn't flood terminal
+            edith_logger.debug(f"Tool returned: {str(result)[:150]}...") # Only print first 150 chars so it doesn't flood terminal
             
             tool_message = ToolMessage(
                 content=str(result),
@@ -201,7 +202,7 @@ class Brain:
         Streams the AI response for the 'Mouth' while
         accumulating the final answer to store in memory at the end.
         """
-        print(f"Starting Conversation...")
+        edith_logger.info(f"Starting Conversation...")
         # 1. We put the user's request into the backpack
         initial_backpack = {"messages": [HumanMessage(content=user_input)]}
         # This config tell the checkpointer which memory to load
@@ -249,15 +250,15 @@ class Brain:
                             speech_buffer = ""
 
         except Exception as e:
-            print(f"⚠️ Brain error: {e}")
+            edith_logger.error(f"⚠️ Brain error: {e}")
             fallback_text = "I'm sorry Boss, my neural net encountered a generation glitch while thinking about that. Could you try asking me differently?"
             yield fallback_text
             full_response_content += fallback_text
             
         # After the stream is done, store the full response.
         if full_response_content.strip():
-            print(f"Full response from Manager: {full_response_content}")
-            print(f"Storing the user's request and the final answer in memory...")
+            edith_logger.info(f"Full response from Manager: {full_response_content}")
+            edith_logger.info(f"Storing the user's request and the final answer in memory...")
             self.memory_manager.store(user_input, full_response_content)
 if __name__ == "__main__":
     async def test_memory():

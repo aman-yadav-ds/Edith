@@ -1,5 +1,6 @@
 from src.memory_store import MemoryStore
 from src.memory_supervisor import MemorySupervisor
+from utils.logger import edith_logger
 
 class MemoryManager:
     """
@@ -19,14 +20,14 @@ class MemoryManager:
         memory = self.supervisor.extract(user_msg, ai_msg)
 
         if memory == "NONE":
-            print("🚫 No permanent memory extracted.")
+            edith_logger.info("🚫 No permanent memory extracted.")
             return
 
         try:
             self.store_db.add_memory(memory)
-            print(f"💾 Memory saved: {memory}")
+            edith_logger.info(f"💾 Memory saved: {memory}")
         except Exception as e:
-            print(f"⚠️ Failed to save memory: {e}")
+            edith_logger.warning(f"⚠️ Failed to save memory: {e}")
 
     def retrieve(self, query: str) -> str:
         """
@@ -36,19 +37,20 @@ class MemoryManager:
         try:
             should_retrieve = self.supervisor.should_retrieve(query)
             if not should_retrieve:
-                print(f"🚫 Memory retrieval deemed unnecessary by supervisor: {should_retrieve}")
+                edith_logger.info(f"🚫 Memory retrieval deemed unnecessary by supervisor: {should_retrieve}")
                 return ""
             else:
-                print(f"✅ Memory retrieval approved by supervisor: {should_retrieve}")
+                edith_logger.info(f"✅ Memory retrieval approved by supervisor: {should_retrieve}")
                 results = self.store_db.search_memory(query, n_results=3)
             if not results:
+                edith_logger.info("📭 No relevant memories found.")
                 return ""
             
             # Format results for the LLM
             formatted_memories = "\n".join([f"- {m}" for m in results])
             return formatted_memories
         except Exception as e:
-            print(f"⚠️ Failed to retrieve memory: {e}")
+            edith_logger.warning(f"⚠️ Failed to retrieve memory: {e}")
             return ""
 
 if __name__ == "__main__":
