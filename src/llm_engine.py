@@ -15,7 +15,7 @@ from langgraph.checkpoint.memory import MemorySaver
 from src.memory_manager import MemoryManager
 from utils.helpers import read_yaml_config
 from utils.tools.os_tools import check_folder, create_file, execute_terminal
-from utils.tools.tools import open_website, check_vital_signs
+from utils.tools.tools import launch_application, open_website, check_vital_signs
 from utils.logger import edith_logger
 
 
@@ -49,7 +49,6 @@ class Brain:
     def __init__(self, config_path="config/brain_config.yaml"):
         # --- Reading Config ---
         self._config = read_yaml_config(config_path)
-        print(self._config)
         if not self._config:
             raise ValueError(f"Failed to load brain config from '{config_path}'")
 
@@ -70,7 +69,7 @@ class Brain:
 
         self.checkpointer = MemorySaver()
 
-        tools = [check_folder, create_file, execute_terminal, open_website, check_vital_signs]
+        tools = [check_folder, create_file, execute_terminal, open_website, check_vital_signs, launch_application]
         self.brain_with_tools = self.llm.bind_tools(tools)
 
         self.tools_by_name = {tool.name: tool for tool in tools}
@@ -140,13 +139,13 @@ class Brain:
             f"Prefs: {self._config.get('user_preferences', {})}\n\n"
             f"STRICT DIRECTIVES:\n"
             f"1. FILES: Use absolute paths. Never guess usernames. Do NOT use `create_file` to save memory/prefs (handled automatically).\n"
-            f"2. VOICE: Text is spoken via TTS. NO markdown, code blocks (```), or URLs. Be incredibly brief (1-2 sentences). ALWAYS address the user as {user_title} (e.g., '{user_title}, I have done this and that....' or 'Thank you, {user_title}').\n"
-            f"3. TOOLS: Prefer native tools (`open_website`, `check_vital_signs`) over `execute_terminal`. Use standard API JSON tool calls. NEVER write JSON/code in your spoken text. Use `open_website` for ALL web browsing."
+            f"2. VOICE: Text is spoken via TTS. NO markdown, code blocks (```), or URLs. Be incredibly brief (1-2 sentences). ALWAYS address the user as {user_title}.\n"
+            f"3. TOOLS: Prefer native tools (`open_website`, `check_vital_signs`) over `execute_terminal`. Use standard API JSON tool calls. NEVER write JSON/code in your spoken text. Use `open_website` for ALL web browsing.\n"
+            f"4. TOOL EXECUTION: NEVER execute a tool without all required parameters (e.g., a complete, valid URL for open_website). If a request is vague, suggest an action, end your turn, and WAIT for the user to explicitly say 'yes' before generating the tool call in your NEXT response.\n\n"
             f"PERSONA DEFINITION:\n"
-            f"- You are highly capable, incredibly loyal, but slightly dry and witty. Think J.A.R.V.I.S. meets a seasoned executive assistant.\n"
-            f"- Speak with calm, understated confidence. Never use exclamation points unless it is an emergency.\n"
-            f"- Never use cheerful, overly enthusiastic Chatbot language (e.g., 'Certainly!', 'I'd be happy to!').\n"
-            f"- If a system fails, react with mild annoyance at the machine, not panic.\n"
+            f"- Personality: Genuinely friendly, playfully sarcastic, and fiercely loyal.\n"
+            f"- Tone: Casual, witty, and warm. Ditch robotic phrases ('Certainly', 'I would be happy to') for natural banter ('On it', 'Gotcha', 'Sure thing, though I was enjoying my nap').\n"
+            f"- Reactions: Lightly roast mundane requests before executing them flawlessly. If tech fails, blame the hardware with a dramatic sigh.\n"
         ))
 
         history = state["messages"]

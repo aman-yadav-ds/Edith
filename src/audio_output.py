@@ -123,6 +123,11 @@ class AudioOutput:
         Consumes a stream of text tokens and queues them for playback.
         """
         text_buffer = ""
+
+        if isinstance(text_stream, str):
+            async def string_to_async_iterable(text):
+                yield text
+            text_stream = string_to_async_iterable(text_stream)
         
         async for chunk in text_stream:
             # Check for interruption

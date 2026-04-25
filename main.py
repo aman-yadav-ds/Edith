@@ -51,9 +51,9 @@ async def main_loop():
         # Check for exit commands
         # Because sometimes you just need some peace and quiet.
 
-        exit_phrases = ["exit", "shutdown", "shut down"]
+        exit_phrases = ["exit", "shutdown", "shut down", "goodbye", "bye"]
         if any(phrase in user_text.lower() for phrase in exit_phrases):
-            await audio_output.speak("Catch you on the flip side!", on_start_speaking)
+            await audio_output.speak("Logging Off. Boss", on_start_speaking)
             os._exit(0)
 
         # 2. THINK: Send it to the Brain and get a stream of thoughts back.

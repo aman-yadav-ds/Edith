@@ -8,7 +8,8 @@ SAFE_APPS = {
     "apex": r"C:\\Program Files\\EA Games\\Apex\\r5apex.exe",
     "wuthering waves": r"C:\\Program Files\\Wuthering Waves\\launcher.exe",
     "arknights": r"C:\\Program Files\\Arknights Endfield\\launcher.exe",
-    "obs": r"C:\\Program Files\\obs-studio\\bin\\64bit\\obs64.exe"
+    "obs": r"C:\\Program Files\\obs-studio\\bin\\64bit\\obs64.exe",
+    "code": r"C:\\Users\\ay272\\AppData\\Local\\Programs\\Microsoft VS Code\\Code.exe",
 }
 
 @tool
@@ -64,3 +65,24 @@ def check_vital_signs(action: str) -> str:
     except Exception as e:
         return f"Error checking vital signs: {str(e)}"
     
+
+@tool
+def launch_application(app_name: str) -> str:
+    """
+    Launches a specified application from a predefined list of safe apps.
+    
+    WHEN TO USE:
+    - ALWAYS use this tool when the user asks to "open", "launch", or "run" a specific application.
+    - DO NOT use the `execute_terminal` tool to launch applications.
+    
+    INPUT: A string representing the name of the application to launch (e.g., "code", "obs").
+    """
+    try:
+        app_name = app_name.lower()
+        if app_name in SAFE_APPS:
+            subprocess.Popen(SAFE_APPS[app_name])
+            return f"Launching {app_name}..."
+        else:
+            return f"Application '{app_name}' is not in the list of safe apps."
+    except Exception as e:
+        return f"Error launching application: {str(e)}"
