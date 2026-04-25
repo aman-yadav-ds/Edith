@@ -1,6 +1,7 @@
 import asyncio
 import os
 import platform
+import json
 from dotenv import load_dotenv
 
 from typing import TypedDict, Annotated
@@ -16,6 +17,7 @@ from src.memory_manager import MemoryManager
 from utils.helpers import read_yaml_config
 from utils.tools.os_tools import check_folder, create_file, execute_terminal
 from utils.tools.tools import launch_application, open_website, check_vital_signs
+from utils.tools.active_memory import update_whiteboard, session_whiteboard
 from utils.logger import edith_logger
 
 
@@ -43,7 +45,6 @@ def router(state: AgentState):
         edith_logger.debug(f"Router is routing to END...")
         return "end"
 
-
 # --- 2. The Brain ---
 class Brain:
     def __init__(self, config_path="config/brain_config.yaml"):
@@ -69,7 +70,7 @@ class Brain:
 
         self.checkpointer = MemorySaver()
 
-        tools = [check_folder, create_file, execute_terminal, open_website, check_vital_signs, launch_application]
+        tools = [check_folder, create_file, execute_terminal, open_website, check_vital_signs, launch_application, update_whiteboard]
         self.brain_with_tools = self.llm.bind_tools(tools)
 
         self.tools_by_name = {tool.name: tool for tool in tools}
@@ -131,17 +132,25 @@ class Brain:
 
         user_title = self._config.get('user_preferences', {}).get('name_pref', 'Boss')
 
+        whiteboard_display = json.dumps(session_whiteboard, indent=2)
         # 4. Build the System Prompt using the CACHED memories
         system_prompt = SystemMessage(content=(
             f"Role: {self._config.get('name', 'Edith')}, a voice AI on {current_os}.\n"
             f"Home: {home_directory}\n"
             f"Memories: {self.active_memory_context}\n"
             f"Prefs: {self._config.get('user_preferences', {})}\n\n"
+
+            f"=== SESSION WHITEBOARD (RAM) ===\n"
+            f"This is your live working memory reflecting the current state:\n"
+            f"{whiteboard_display}\n"
+            f"================================\n\n"
+
             f"STRICT DIRECTIVES:\n"
             f"1. FILES: Use absolute paths. Never guess usernames. Do NOT use `create_file` to save memory/prefs (handled automatically).\n"
             f"2. VOICE: Text is spoken via TTS. NO markdown, code blocks (```), or URLs. Be incredibly brief (1-2 sentences). ALWAYS address the user as {user_title}.\n"
             f"3. TOOLS: Prefer native tools (`open_website`, `check_vital_signs`) over `execute_terminal`. Use standard API JSON tool calls. NEVER write JSON/code in your spoken text. Use `open_website` for ALL web browsing.\n"
             f"4. TOOL EXECUTION: NEVER execute a tool without all required parameters (e.g., a complete, valid URL for open_website). If a request is vague, suggest an action, end your turn, and WAIT for the user to explicitly say 'yes' before generating the tool call in your NEXT response.\n\n"
+
             f"PERSONA DEFINITION:\n"
             f"- Personality: Genuinely friendly, playfully sarcastic, and fiercely loyal.\n"
             f"- Tone: Casual, witty, and warm. Ditch robotic phrases ('Certainly', 'I would be happy to') for natural banter ('On it', 'Gotcha', 'Sure thing, though I was enjoying my nap').\n"
@@ -149,7 +158,17 @@ class Brain:
         ))
 
         history = state["messages"]
-        trimmed_history = history[-10:]  # Keep only the last 10 messages for context to save tokens
+        
+        # Grab the last 10 messages
+        trimmed_history = history[-10:]  
+        
+        # SAFETY GUARD: Never orphan a ToolMessage
+        # If the oldest message in our slice is a ToolMessage, 
+        # we MUST pull in one more message (the AIMessage that called it)
+        if trimmed_history and isinstance(trimmed_history[0], ToolMessage):
+            # Pull 11 messages instead to keep the tool call and result paired
+            trimmed_history = history[-11:] 
+
         messages_to_send = [system_prompt] + trimmed_history
 
         response = self.brain_with_tools.with_config({"tags": ["main_voice"]}).invoke(messages_to_send)
