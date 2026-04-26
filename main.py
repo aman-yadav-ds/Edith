@@ -3,7 +3,6 @@ import os
 import threading
 import customtkinter as ctk
 
-# Your existing imports
 from src.audio_input import AudioInput
 from src.llm_engine import Brain
 from src.audio_output import AudioOutput
